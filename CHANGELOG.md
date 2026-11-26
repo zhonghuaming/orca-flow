@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-26
+
+### 原生迁移
+
+- 新独立插件 `zhonghuaming.flow-native`，中文显示名 Orca Flow。
+- 移除供应商账号、登录、额度与 agy 启动链路，去掉自由 CLI flags 和私有团队队列。
+- 改为四个已有 Orca 原生 Bot：产品、架构、开发、测试；不创建机器人，不修改权限。
+- 保留中文敏捷看板、迭代、史诗、关联任务和工作流目标/模板；新存储与旧插件隔离。
+- 使用原生消息回执、Run 和依赖任务查询，不以投递成功或 Bot 空闲冒充任务完成。
+- 加入启动去重、未知投递不重放、冻结工作区核对、IPC 校验及假 CLI/面板离线回归。
+
+以下为上游历史版本记录，不代表当前运行功能。
+
 ## [1.1.0] - 2026-11-24
 
 ### Added

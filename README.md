@@ -1,183 +1,85 @@
-# Antigravity Flow
+# Orca Flow
 
-![Antigravity Flow plugin banner: agile board with account switching and quota table](assets/cover.png)
+中文敏捷看板与 **Orca 原生四角色 Bot** 工作流。源码仓库：<https://github.com/zhonghuaming/orca-flow>。
 
-An Orca plugin to orchestrate agile startup workflows, multi-agent sprint pipelines, Orca Bot teams, work items, customizable personas, isolated Antigravity (`agy`) account switching, dynamic execution flags (such as `--dangerously-skip-permissions`), rich markdown startup prompts, host global skills sharing, and direct integration with Orca's **Workspace Board**.
-
----
-
-## Quick Start (For New Orca Users)
-
-1. Open **Antigravity Flow** from Orca's right sidebar — you will land on the **Start Here** tab.
-2. Follow the live **3-Step Readiness Checklist**:
-   - **1. Choose an Orca Workspace**: Open any project or Git worktree from Orca's left sidebar.
-   - **2. Connect an Antigravity Account**: Click **Sign In Now** to authenticate at least one persona account.
-   - **3. Pick Team Mode**: Keep **Auto Agent Team (Recommended — 100% automatic, zero setup)** or switch to **Orca Bots Team** if you already have bots in Orca.
-3. Click any **1-Click Starter Mission** (**Launch Sprint Team**, **Launch Hotfix**, or **Launch Spike**) — your AI personas launch and coordinate with each other automatically.
-
----
-
-## Key Features
-
-1. **Beginner-Friendly "Start Here" Onboarding**:
-   - Live 3-step readiness checklist (Workspace detection, Account sign-in status, and Team Mode picker).
-   - **1-Click Starter Missions** for Sprint delivery, Rapid Bugfix, and Architecture Spike.
-   - Built-in **New to Orca? Quick Guide** glossary explaining Workspaces, Agile Board, Startup Workflows, and Accounts.
-
-2. **Agile Board with Synchronized Orca Workspace Board Lanes**:
-   - **Lanes Synced to Orca**: Native 1:1 synchronization with Orca's default Kanban lanes:
-     - `Todo` (`todo`): Backlog items ready to be planned or scheduled.
-     - `In Progress` (`in-progress`): Actively assigned or currently running with an agent.
-     - `In Review` (`in-review`): Code QA, testing, and PR verification.
-     - `Done` (`completed`): Accepted, passing tests, and committed.
-   - **1-Click Lane Transition**: Move cards between lanes instantly with responsive lane buttons.
-   - **Lane Filtering**: Switch between `All`, `Todo`, `In Progress`, `In Review`, and `Done` filters.
-   - **Direct Orca Workspace Board Integration**: 1-click **"Workspace Board"** button triggers Orca's built-in Kanban board (`workspace.openBoard`).
-   - **"Run with Agent"**: Spawns `agy` in an isolated workspace terminal loaded with the task's full sprint, epic, and persona context, automatically updating status to `in-progress`.
-   - **Real-Time Agent-to-Board Status Sync**:
-     - Automatically listens to Orca's `agent.status.changed` events and inspects terminal output (`terminal.read`) for linked work items:
-       - `working` -> **In Progress** (`in-progress`)
-       - `waiting` / `blocked` or review requests in terminal (e.g. *"ready for review"*, *"please review"*, *"PR ready"*, *"minta review"*) -> **In Review** (`in-review`)
-       - `done` (clean completion) -> **Done** (`completed`)
-     - Supports explicit agent self-reporting via `node team-chat.mjs board --item <itemId> --status todo|in-progress|in-review|completed`.
-     - Includes an on-demand **"Sync Agents"** button on the Agile Board header to pull live states from all active workspace agents (`agents.list`).
-
-3. **Roadmap & Sprints Lifecycle**:
-   - **Strategic Epics (Roadmap)**:
-     - High-level product initiatives with milestone goals and status tracking (`planned`, `in-progress`, `completed`).
-     - Real-time progress bar velocity calculations (`N / M story points • X% completed`) aggregated from all associated work items.
-     - Add, edit, and delete Epics.
-   - **Sprints Management**:
-     - View sprint timeline, capacity in story points, and sprint goals.
-     - **+ New Sprint**: Create upcoming iterations with custom start/end dates and target points.
-     - **Complete Sprint with Task Rollover**: Archive completed sprints and automatically roll over unfinished tasks to an active or planning target sprint.
-     - **Delete Sprint**: Delete sprints with inline confirmation and choose to move existing tasks to another sprint or remove them with the sprint.
-
-4. **Default Startup Workflows with Built-In Agent & Bot Communication**:
-   - **Goal-Driven Launches**: Target a full **Sprint**, **Epic**, **Single Work Item**, or **General Mission** (+ optional *Definition of Done*) before launching.
-   - **Two Execution Modes**:
-     - **Auto Agent Team (100% Automatic — Recommended)**: Spawns isolated `agy` persona terminals and creates a shared coordination room (`GOAL.md`, `ROSTER.md`, `THREAD.md`, live `PEERS.json` with terminal IDs, per-step `inbox/<step>.md`, and a zero-dependency `team-chat.mjs` CLI). Agents automatically post updates, ask questions, and hand off work to each other via `team-chat.mjs` and `orca orchestration send`.
-     - **Orca Bots Team (Semi-Auto with Existing Orca Bots)**: Automatically discovers local Orca Bots from `~/.orca/bots/*/bot.json` and `SOUL.md`, maps steps explicitly (or auto-assigns available bots round-robin by default), and dispatches personalized peer-to-peer handoffs (`orca orchestration send --to bot:<name>`). If dedicated persona bots don't exist yet, the lead bot kickoff includes ready-to-run `orca bot create --offer` commands so you can approve them with one click in Orca.
-   - **Pre-Built Startup Pipelines**:
-     - **Agile Sprint: Feature Epic Delivery**: 5-stage pipeline chaining:
-       1. *Product Manager & Scrum Lead* (Epic scope, user stories, acceptance criteria -> Todo)
-       2. *Software Architect & Planner* (API contracts, data models, tech specs -> Todo / In Progress)
-       3. *Senior Fullstack Developer* (Clean code implementation, TDD, unit tests -> In Progress)
-       4. *Code Reviewer & QA Engineer* (Regressions, edge cases, acceptance verification -> In Review)
-       5. *Security Auditor* (Permission boundaries, dependency checks, release gate -> Done)
-     - **Agile Hotfix: Rapid Bugfix & Patch**: QA bug triage -> Fullstack surgical patch -> Security clearance.
-     - **Agile Spike: Architecture & Tech Evaluation**: Architect prototype spike -> Developer estimation & feasibility.
-
-5. **Antigravity Token Quota & Remaining Limits**:
-   - **Live Token Quota Breakdown**: Queries `agy -p /usage --output-format json` in each account's isolated environment:
-     - **Gemini Models** (Gemini 4 Neon, Hydrogen, Orchestrator, 3.8 Flash):
-       - **5-Hour Limit Remaining**: Smooths out rolling demand (`X% remaining`, with exact countdown reset time `resets in 3h 50m`).
-       - **Weekly Limit Remaining**: Individual plan capacity (`X% remaining`, with reset countdown `resets in 6d 6h`).
-     - **Claude and GPT Models** (Opus 5.5, Sonnet 5.5, GPT-OSS 120B):
-       - **5-Hour & Weekly Limits**: Dedicated 3rd-party capacity and remaining percentage.
-     - **Gemini 4 Argon**:
-       - Dedicated Pro/Ultra model quota bucket.
-   - **Zero Cost / Zero Token Consumption**: Uses agy's official built-in `/usage` probe which consumes zero model turns and zero quota tokens.
-   - **Color-Coded Badges**: Green (`>50% remaining`), Amber (`20%-50%`), Red (`<20% remaining`) for immediate visibility.
-   - **1-Click "Refresh Quotas"**: On-demand real-time query across all configured accounts.
-
-6. **Account Feature Usage Monitoring**:
-   - **Aggregate & Per-Account Analytics**: Real-time velocity tracking for each account:
-     - Total Direct Summons
-     - Pipeline Workflow Steps Executed
-     - Agile Tasks Completed & Total Story Points Delivered
-     - Active / In-Progress Tasks
-     - Disk & Cache Footprint (`~/.gemini-accounts/<id>/`) without counting symlinked host skills
-     - Brain Conversations & Sessions Log Count
-     - Last Active timestamp relative display (`Just now`, `5m ago`, `2h ago`)
-   - **Chronological Activity Timeline Stream**: Live audit log of recent actions (`SUMMON`, `WORKFLOW`, `TASK`) with workspace and prompt context.
-   - **Quick Badges in Accounts Tab**: High-level token quota and usage indicators directly on each account card with 1-click jump to detailed analytics.
-   - **Maintenance**: 1-click "Refresh Stats" and "Clear History".
-
-7. **Account & Credential Isolation**:
-   - Isolates `HOME` and `GEMINI_HOME` on a per-account basis (under `~/.gemini-accounts/<account-id>/`).
-   - Ensures distinct OAuth tokens, conversations, and settings without collisions.
-   - **Automatic OAuth Email Sync**: Atomically reconciles each configured account's email with its authenticated `antigravity-oauth-token` (`id_token_email`) on load and quota sync, clearing stale emails on unsigned accounts and displaying the verified email badge directly on each **Configured Accounts** card.
-   - Headless token storage fallback flags (`DBUS_SESSION_BUS_ADDRESS=""`, `SSH_CONNECTION="127.0.0.1"`).
-
-8. **Access Host Global Skills (`~/.gemini/skills`)**:
-   - Option to share host-wide global skills (`~/.gemini/skills/`, `~/.gemini/config/skills/`, `~/.gemini/antigravity-cli/skills/`) into each isolated account's environment via non-destructive symlinks.
-   - Enabled by default per account with a toggle in the configuration form.
-
-9. **Dynamic CLI Options & Flags**:
-   - Dynamic toggle for `--dangerously-skip-permissions` to bypass interactive tool approval prompts.
-   - Freeform input for arbitrary flags (e.g. `--model gemini-2.5-pro`, `--verbose`, `--sandbox`).
-   - Configure flags at the account level or override them on the fly when summoning.
-
-10. **Custom Agent Personas**:
-    - Pre-configured startup roles:
-      - *Product Manager & Scrum Lead*
-      - *Software Architect & Planner*
-      - *Senior Fullstack Developer*
-      - *Code Reviewer & QA Engineer*
-      - *Security Auditor*
-      - *Custom Persona*
-    - The worker automatically syncs persona instructions into `$GEMINI_HOME/rules/AGENTS.md` and `$accountDir/PERSONA.md`.
-
----
-
-## Architecture & File Structure
+## 工作方式
 
 ```text
-antigravity-flow/
-├── orca-plugin.json      # Manifest v2 with trusted-worker, panels, settings, commands
-├── src/
-│   ├── protocol.ts       # Type-safe IPC contract between UI panel and background worker
-│   └── panel.tsx         # Declarative TSX components panel (Agile Board, Workflows, Accounts)
-├── worker/
-│   └── main.mjs          # Trusted Node.js worker handling storage, sprint/epic state, and Workspace Board calls
-├── tsconfig.json         # Standalone TypeScript definitions
-└── README.md             # Documentation
+工作区 + 看板目标 + 明确的验收标准
+                 ↓ 单次原生 handoff
+产品 Bot：需求、验收标准、原生 Run 与依赖任务
+                 ↓
+架构 Bot：方案与接口边界
+                 ↓
+开发 Bot：实现及测试证据
+                 ↓
+测试 Bot：对同一版本独立验收
 ```
 
----
+产品 Bot 负责原生任务生命周期及跨角色交接。插件不启动供应商 CLI、不读取账号或凭据、不查询模型额度、不设置工具免确认，也不会创建或更改机器人。模型与工具权限由各个 Orca Bot 自身配置管理。
 
-## Development
+### 状态真实性
 
-1. **Load Development Plugin**:
-   ```bash
-   orca plugin dev load ./plugins/antigravity-flow
-   ```
-2. **Reloading Code Changes vs Refreshing Data**:
-   - **Reloading Code Changes**: When editing plugin source files (`panel.tsx`, `main.mjs`), reload the Orca window with `Ctrl+R` / `Ctrl+Shift+R` (or Command Palette $\to$ **Reload Window**), or run `orca plugin dev reload`.
-   - **Refreshing Data**: The **Refresh** button inside the panel header re-syncs the accounts, workspaces, and workflows from storage and clears previous status/error banners.
-3. **Validate the Manifest** (same check the directory runs):
-   ```bash
-   pnpm validate:plugin path/to/orca-antigravity-flow
-   ```
+- **已投递**仅说明 Orca 返回了消息回执，不代表模型已执行。
+- 产品 Bot 创建原生 Run，目标名称必须包含本次唯一 `Flow <id>:` 标记；四个原生任务名为 `[Flow product]`、`[Flow architect]`、`[Flow developer]`、`[Flow tester]`。
+- “核对原生任务”只读原生运行与任务记录。四阶段均标记完成且附结果，才显示“已完成”；结果报告仍可独立复核，不保证自然语言报告本身正确。
+- 超时、崩溃和缺失回执均保留**结果未知**；不会自动重发。请在原生运行中核对，不要新建流程冒充重试。正文写入等确定发生于投递前的失败会标为“失败”，不会永久占用工作区。
+- 已结束运行可点“归档详细记录”：先将原始目标与当前证据记录保存到本机插件目录的 JSON 文件，再缩减面板历史；未知或未结束运行不能借归档解除占用。原生任务保留完整报告，面板结果按 UTF-8 字节预算展示摘要，避免长中文报告撑爆消息容量。
+- 本插件的业务看板保存在独立插件存储中，任务状态由用户明确调整。打开原生看板不是把业务任务伪装成原生终端卡片。
 
-## Usage
+## 首次使用
 
-1. Open the **Antigravity Flow** icon in the Right Sidebar Activity Bar.
-2. Configure the two plugin settings (`accountsBaseDir`, `agyCommand`) under **Settings → Plugins** if your defaults differ from `~/.gemini-accounts` and `agy`.
-3. Use the panel tabs:
-   - **Start Here**: guided 3-step readiness checklist, 1-click starter missions, and a quick Orca glossary for newcomers.
-   - **Agile Board**: manage work items and sprints; run agents in isolated workspaces.
-   - **Roadmap**: plan Epics and track story-point velocity.
-   - **Startup Workflows**: pick **Auto Agent Team** (100% auto) or **Orca Bots Team** (semi-auto with local bots), select a Sprint/Epic/Work Item goal, and launch collaborating persona teams.
-   - **Accounts**: add isolated Antigravity accounts, toggle host skills sharing, and inspect per-account quota/usage badges.
-   - **Usage & Quotas**: view live Gemini & 3rd-party token limits and chronological activity logs.
+1. 在 Orca 打开目标项目/工作区。
+2. 从插件侧栏打开 **Orca Flow**，在顶部明确选择目标工作区。
+3. 在“原生机器人”中点击“发现本机机器人”。这只读取 Orca Bot 列表，不启动模型。
+4. 将产品、架构、开发、测试绑定到**四个不同的已有 Bot**，保存绑定。暂停或缺失的 Bot 会阻止启动，不会轮转替换。
+5. 按需创建迭代、史诗、任务与工作流模板；自定义名称、任务目标和说明保持原文。
+6. 在“团队工作流”点击“准备启动”，核对路径、分支、角色与目标，再点击“发送给产品 Bot”。**这会启动真实 Bot 工作，可能消耗其所配置模型额度。**
+7. 查看产品 Bot 的原生聊天及运行；在“运行记录”点击“核对原生任务”。自动发现只查最近 100 个 Run，如找不到，请输入产品 Bot 回报的准确 `runId`。
 
-## Publishing
+当前只支持本机四 Bot，非本机工作区会明确拒绝。启动时冻结宿主、工作区 ID、路径、分支和项目。产品 Bot 必须在真实目标位置操作，不能把提示词中的路径当作实际目录绑定；不确定位置就阻塞。插件刷新时会拒绝目标路径/分支/项目已变化的运行。四角色之间使用原生消息，不建立私有文件队列，不消费其他会话邮箱。
 
-The Orca community directory lists plugins that:
+## 本地开发与离线验证
 
-1. Live in a public GitHub repo with `orca-plugin.json` (manifest v2) at the root, plus a `publisher` field and a `license` / `LICENSE` file.
-2. Carry the `orca-plugin` topic.
-3. Have a `vX.Y.Z` git tag.
+不需要前端构建或网络依赖。需要已安装的 Orca、Node.js；类型检查另需本机 TypeScript。
 
-There is no form and no review queue — the directory lists the newest tag, usually within an hour, after validation:
-
-```bash
-gh repo edit mqnoy/orca-antigravity-flow --add-topic orca-plugin
-git add orca-plugin.json LICENSE
-git commit -m "chore: publish-ready manifest"
-git tag v1.0.0 && git push origin v1.0.0
+```text
+orca plugin types E:/workspace/orca-flow --json
+node --test E:/workspace/orca-flow/tests/*.test.mjs
+node --test --experimental-test-coverage E:/workspace/orca-flow/tests/*.test.mjs
+orca plugin test E:/workspace/orca-flow --json
+orca plugin check E:/workspace/orca-flow --json
+orca plugin validate E:/workspace/orca-flow --json
+tsc -p E:/workspace/orca-flow --noEmit
 ```
 
-Status page: `https://orca.dev/plugins/mqnoy/orca-antigravity-flow`.
+- `plugin test` 运行本地假宿主/假 CLI，不发真实任务。
+- `plugin check` 的 `empty` 和 `populated` 场景只使用假工作区与内存存储，不运行原生 CLI。
+- `.orca/types` 由 Orca 生成，不应修改或提交。
+- `artifacts/` 用于离线日志与截图，默认不提交，避免带出本机项目信息。
+- `node --test` 的缺省临时探针在系统临时目录下创建并清理，不访问真实账号。
+
+### 安全截图
+
+窗口隐藏或最小化时，可使用离线场景截图，不触碰真实插件面板、存储或机器人：
+
+```text
+orca plugin shot E:/workspace/orca-flow --scenario populated --width 900 --out E:/workspace/orca-flow/artifacts/flow-wide.png --json
+orca plugin shot E:/workspace/orca-flow --scenario populated --width 360 --out E:/workspace/orca-flow/artifacts/flow-narrow.png --json
+```
+
+### 加载
+
+`orca plugin dev load E:/workspace/orca-flow --json` 会显示插件访问授权。首次加载须由用户确认本插件的 `trusted-worker` 执行与 `storage:own`、`workspace:read`、`workspace:write` 能力。Node worker 在本机用户身份运行，声明能力并不构成 Node 文件系统/进程沙箱。CLI 调用采用固定命令、参数数组、无 shell、超时限制，并清除继承的会话身份及远端选择环境。
+
+Windows 默认使用当前安装的 `.../Programs/orca/resources/bin/orca.exe`；Orca 管理的环境优先使用 `ORCA_CLI_COMMAND`。其他系统默认 `/usr/local/bin/orca`，可由宿主环境提供准确的 `ORCA_CLI_COMMAND`，不要把它设置为 shell 命令串。
+
+## 迁移边界
+
+这是独立插件 ID `flow-native`、发布者 `zhonghuaming`，不会接管旧插件存储或复制旧账号信息。旧插件和保全快照不变；若需迁移既有业务任务，应单独提供可审查的显式导入流程，而不是静默搬迁凭据或改写已存任务。
+
+旧版的账号隔离、供应商额度、自由 CLI flags、终端状态推测成功、五角色示例团队、私有团队聊天脚本均已从当前运行源码移除。保留并重新实现中文看板、迭代/史诗、任务关联、工作流目标与模板、原生看板入口和运行证据查询。未保留原供应商的账号和磁盘使用统计。
+
+## 许可证与来源
+
+MIT。Fork 自 [mqnoy/orca-antigravity-flow](https://github.com/mqnoy/orca-antigravity-flow)，保留原 LICENSE 和上游 Git 历史；2.0 起运行实现只使用 Orca 原生 Bots，不依赖原项目对应的供应商。历史版本说明仅为来源记录，不代表当前功能。
