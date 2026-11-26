@@ -3,7 +3,7 @@ import * as panel from './panel'
 
 const state = { roles: {}, bots: [], sprints: [], epics: [], items: [], workflows: [], runs: [], workspaces: [{ id: 'ws-test', name: '离线测试工作区', path: 'E:/workspace/fixture', branch: 'main' }] }
 function host() {
-  return mockHost({ requests: {
+  return mockHost({ results: { 'workspace.readContext': { workspaceId: 'ws-test', branch: 'main', displayName: '离线测试工作区', terminals: [] } }, requests: {
     'flow.getState': state,
     'flow.refreshBots': state,
     'flow.saveEntity': (input) => ({ ...state, items: [input.entity] })
@@ -47,6 +47,7 @@ test('工作区选项展示项目上下文且选择后路径与任务目标保�
     const select = view.find({ type: 'Select', label: '目标工作区' })
     assert.ok(select)
     assert.deepEqual(select.props.options, [
+      { label: '请选择目标工作区', value: '__none__' },
       { label: '应用一 · master', value: 'repo-a' },
       { label: '应用二 · master', value: 'repo-b' }
     ])
@@ -55,7 +56,7 @@ test('工作区选项展示项目上下文且选择后路径与任务目标保�
     await view.select({ type: 'Tabs' }, 'workflows')
     await view.press({ type: 'Button', text: '准备启动' })
     assert.ok(view.find({ type: 'Text', text: /冻结工作区：\s*master\s*·\s*D:\/work\/app-two/ }), JSON.stringify(view.findAll({ type: 'Text' }).map((entry) => entry.text)))
-    assert.equal(h.calls.some((call) => JSON.stringify(call.params).includes('flow.launch')), false)
+    assert.equal(h.calls.some((call) => JSON.stringify(call.params ?? null).includes('flow.launch')), false)
   } finally { await view.unmount() }
 })
 
@@ -68,6 +69,6 @@ test('工作流先显示目标与角色确认，不在加载或导航时派发',
     await view.press({ type: 'Button', text: '准备启动' })
     assert.ok(view.find({ type: 'Textarea', label: '目标与验收标准' }))
     assert.ok(view.find({ type: 'Button', text: '发送给产品 Bot' })?.disabled)
-    assert.equal(h.calls.some((call) => JSON.stringify(call.params).includes('flow.launch')), false)
+    assert.equal(h.calls.some((call) => JSON.stringify(call.params ?? null).includes('flow.launch')), false)
   } finally { await view.unmount() }
 })

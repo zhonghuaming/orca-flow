@@ -1,13 +1,16 @@
 import {
-  atom, Badge, Box, Button, Callout, Card, EmptyState, Heading, Input, plugin, read,
+  atom, Badge, Box, Button, Callout, Card, Checkbox, EmptyState, Heading, host, Input, on, plugin, read,
   Row, Select, set, Stack, Tab, Tabs, Text, Textarea, type PanelContext
 } from 'orca'
 import type { EntityKind, FlowEntity, FlowState, RoleKey } from './protocol'
 import { buildWorkspaceOptions } from './workspaceLabels'
+import { mergeInitialSnapshot, resolveFocusedWorkspaceId, type WorkspaceFocus } from './workspaceFocus'
 
 const data = atom<FlowState>({ roles: {}, bots: [], sprints: [], epics: [], items: [], workflows: [], runs: [], workspaces: [] })
 const tab = atom('board')
 const workspace = atom('')
+const followWorkspace = atom(true)
+const focusedWorkspace = atom<WorkspaceFocus | null>(null)
 const busy = atom(false)
 const notice = atom<{ tone: 'accent' | 'danger' | 'success'; message: string } | null>(null)
 const formKind = atom<EntityKind | null>(null)
@@ -38,10 +41,29 @@ const LABELS: Record<string, string> = {
 const LANES = ['todo', 'in-progress', 'in-review', 'completed']
 const label = (value = '') => LABELS[value] || value
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+function selectWorkspace(id: string) {
+  if (id === read(workspace)) return
+  set(workspace, id)
+  set(formKind, null)
+  set(launchOpen, false)
+  set(deleting, '')
+  set(goalTarget, '__none__')
+  set(nativeRunDraft, '')
+}
+function pinDraft() {
+  set(followWorkspace, false)
+  set(notice, { tone: 'accent', message: '当前有未提交的表单，已固定原目标以保护草稿；关闭表单后可重新开启自动跟随。' })
+}
+function applyWorkspaceFocus() {
+  if (!read(followWorkspace)) return
+  const target = resolveFocusedWorkspaceId(read(focusedWorkspace), read(data).workspaces || [])
+  if (target !== read(workspace) && (read(formKind) || read(launchOpen))) { pinDraft(); return }
+  selectWorkspace(target)
+}
 function update(next: FlowState) {
   const previous = read(data)
   set(data, { ...next, workspaces: next.workspaces ?? previous.workspaces })
-  if (!read(workspace) && next.workspaces?.length) set(workspace, next.workspaces[0]!.id)
+  applyWorkspaceFocus()
 }
 async function action(fn: () => Promise<void>) {
   if (read(busy)) return
@@ -102,11 +124,40 @@ async function launch() {
   set(notice, { tone: 'accent', message: '已投递给产品 Bot，等待建立原生四阶段任务；这不代表模型执行或验收成功。' })
 }
 export function setup(ctx: PanelContext) {
-  ctx.subscriptions.push(plugin.on('flow.changed', update))
+  let revision = 0
+  let businessRevision = 0
+  let disposed = false
+  ctx.subscriptions.push({ dispose: () => { disposed = true; revision++ } })
+  ctx.subscriptions.push(plugin.on('flow.changed', (next) => { businessRevision++; update(next) }))
+  ctx.subscriptions.push(on('workspace.changed', ({ context }) => {
+    const previous = read(focusedWorkspace)
+    const changed = previous?.workspaceId !== context?.workspaceId || previous?.branch !== context?.branch
+    set(focusedWorkspace, context)
+    if (changed && read(followWorkspace) && (read(formKind) || read(launchOpen))) pinDraft()
+    applyWorkspaceFocus()
+    if (!changed) return
+    const current = ++revision
+    void plugin.request('flow.getState').then((next) => {
+      if (disposed || current !== revision) return
+      // Refresh only workspace metadata: a slow lookup cannot overwrite newer business records.
+      set(data, { ...read(data), workspaces: next.workspaces || [] })
+      applyWorkspaceFocus()
+    }).catch((error) => {
+      if (!disposed && current === revision) set(notice, { tone: 'danger', message: `自动定位刷新失败：${error instanceof Error ? error.message : String(error)}` })
+    })
+  }))
+  const initialRevision = revision
+  const initialBusinessRevision = businessRevision
   void action(async () => {
-    const state = await plugin.request('flow.getState')
-    update(state)
-    set(roleDraft, state.roles)
+    const [state, context] = await Promise.all([
+      plugin.request('flow.getState'),
+      host.call('workspace.readContext').catch(() => null)
+    ])
+    if (disposed) return
+    if (revision === initialRevision) set(focusedWorkspace, context)
+    const merged = mergeInitialSnapshot(state, read(data), revision !== initialRevision, businessRevision !== initialBusinessRevision)
+    update(merged)
+    set(roleDraft, merged.roles)
   })
 }
 function entityActions(kind: EntityKind, entity: FlowEntity) {
@@ -154,9 +205,10 @@ export default function Panel() {
     </Row>
     {feedback ? <Callout tone={feedback.tone}>{feedback.message}</Callout> : null}
     <Card title="目标工作区"><Stack gap="sm">
-      {(state.workspaces || []).length ? <Select label="目标工作区" value={read(workspace)} options={buildWorkspaceOptions(state.workspaces || [])} disabled={read(busy)} onChange={(value) => { set(workspace, value || ''); set(formKind, null); set(launchOpen, false) }} /> : <Text>暂无工作区，请先在 Orca 打开项目。</Text>}
-      {selectedWs ? <Text size="xs" muted>{selectedWs.path}</Text> : null}
-      <Text size="xs" muted>启动时冻结项目、路径与分支，不会跟随焦点切换；机器人必须先核对真实执行位置。</Text>
+      {(state.workspaces || []).length ? <Select label="目标工作区" value={read(workspace) || '__none__'} options={[{ label: '请选择目标工作区', value: '__none__' }, ...buildWorkspaceOptions(state.workspaces || [])]} disabled={read(busy)} onChange={(value) => { set(followWorkspace, false); selectWorkspace(value === '__none__' ? '' : value || '') }} /> : <Text>暂无工作区，请先在 Orca 打开项目。</Text>}
+      <Checkbox label="自动跟随当前工作区" description="切换项目或工作区时自动定位；手动选择后固定目标。" checked={read(followWorkspace)} disabled={read(busy) || Boolean(read(formKind) || read(launchOpen))} onChange={(value) => { set(followWorkspace, Boolean(value)); applyWorkspaceFocus() }} />
+      {selectedWs ? <Text size="xs" muted>{selectedWs.path}</Text> : <Text size="xs" muted>当前未定位到唯一工作区，请打开项目或手动选择目标。</Text>}
+      <Text size="xs" muted>已启动流程始终固定原项目、路径与分支，不会随界面焦点切换。</Text>
     </Stack></Card>
     <Box width="100%" minWidth={0} maxWidth="100%" scroll="x">
     <Tabs label="Flow 导航" value={currentTab} onChange={(value) => { set(tab, value || 'board'); set(formKind, null) }}>

@@ -3,11 +3,11 @@ const workspace = { id: 'check-workspace', name: '离线验收项目', path: 'E:
 const base = { roles: {}, bots: [], items: [], sprints: [], epics: [], workflows: [], runs: [] }
 export default defineCheck({
   empty: {
-    results: { 'workspace.list': { workspaces: [workspace] } },
+    results: { 'workspace.list': { workspaces: [workspace] }, 'workspace.readContext': { workspaceId: workspace.id, branch: workspace.branch, displayName: workspace.name, terminals: [] } },
     storage: { flow_native_v1: base }
   },
   populated: {
-    results: { 'workspace.list': { workspaces: [workspace] } },
+    results: { 'workspace.list': { workspaces: [workspace] }, 'workspace.readContext': { workspaceId: workspace.id, branch: workspace.branch, displayName: workspace.name, terminals: [] } },
     storage: { flow_native_v1: {
       ...base,
       items: [
