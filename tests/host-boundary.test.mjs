@@ -33,6 +33,16 @@ test('拒绝本机Bot处理远端工作区，冻结宿主身份', async () => {
     assert.equal(f.sent(), 0)
   } finally { await f.clean() }
 })
+test('保留原生项目显示名，同时原样返回工作区ID与路径', async () => {
+  const f = await harness({ ...local, project: '示例项目' })
+  try {
+    const state = await f.call('flow.getState')
+    assert.equal(state.workspaces[0].projectName, '示例项目')
+    assert.equal(state.workspaces[0].id, local.id)
+    assert.equal(state.workspaces[0].path, local.path)
+  } finally { await f.clean() }
+})
+
 test('正文写入前失败明确标记未投递failed，不永久占用工作区', async () => {
   const f = await harness(local, true)
   try {

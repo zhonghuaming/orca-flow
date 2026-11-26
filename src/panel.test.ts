@@ -36,6 +36,29 @@ test('面板使用明确的宽度约束，窄屏栏目不会撑开整页', async
   } finally { await view.unmount() }
 })
 
+test('工作区选项展示项目上下文且选择后路径与任务目标保持一致', async () => {
+  const workspaces = [
+    { id: 'repo-a', name: 'master', branch: 'master', path: 'E:/work/app-one', projectName: '应用一' },
+    { id: 'repo-b', name: 'master', branch: 'master', path: 'D:/work/app-two', projectName: '应用二' }
+  ]
+  const h = mockHost({ requests: { 'flow.getState': { ...state, workspaces } } })
+  const view = await mount(panel, { host: h })
+  try {
+    const select = view.find({ type: 'Select', label: '目标工作区' })
+    assert.ok(select)
+    assert.deepEqual(select.props.options, [
+      { label: '应用一 · master', value: 'repo-a' },
+      { label: '应用二 · master', value: 'repo-b' }
+    ])
+    await view.select({ type: 'Select', label: '目标工作区' }, 'repo-b')
+    assert.ok(view.find({ type: 'Text', text: 'D:/work/app-two' }))
+    await view.select({ type: 'Tabs' }, 'workflows')
+    await view.press({ type: 'Button', text: '准备启动' })
+    assert.ok(view.find({ type: 'Text', text: /冻结工作区：\s*master\s*·\s*D:\/work\/app-two/ }), JSON.stringify(view.findAll({ type: 'Text' }).map((entry) => entry.text)))
+    assert.equal(h.calls.some((call) => JSON.stringify(call.params).includes('flow.launch')), false)
+  } finally { await view.unmount() }
+})
+
 test('工作流先显示目标与角色确认，不在加载或导航时派发', async () => {
   const h = host()
   const view = await mount(panel, { host: h })

@@ -28,7 +28,7 @@ export async function createFlowWorker(orca, { cli = createNativeCli(), dataDir 
   async function workspaces() {
     const result = await orca.host.call('workspace.list', {})
     if (!Array.isArray(result?.workspaces)) throw new Error('无法读取 Orca 工作区列表。')
-    return result.workspaces.map((w) => ({ id: w.id, name: w.name, path: w.path, branch: w.branch ?? null, projectId: w.projectId ?? null, hostId: w.hostId ?? null }))
+    return result.workspaces.map((w) => ({ id: w.id, name: w.name, path: w.path, branch: w.branch ?? null, projectId: w.projectId ?? null, hostId: w.hostId ?? null, projectName: typeof w.project === 'string' ? w.project : null }))
   }
   async function target(workspaceId) {
     const match = (await workspaces()).find((w) => w.id === workspaceId)

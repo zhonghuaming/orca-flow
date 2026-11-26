@@ -3,6 +3,7 @@ import {
   Row, Select, set, Stack, Tab, Tabs, Text, Textarea, type PanelContext
 } from 'orca'
 import type { EntityKind, FlowEntity, FlowState, RoleKey } from './protocol'
+import { buildWorkspaceOptions } from './workspaceLabels'
 
 const data = atom<FlowState>({ roles: {}, bots: [], sprints: [], epics: [], items: [], workflows: [], runs: [], workspaces: [] })
 const tab = atom('board')
@@ -153,7 +154,7 @@ export default function Panel() {
     </Row>
     {feedback ? <Callout tone={feedback.tone}>{feedback.message}</Callout> : null}
     <Card title="目标工作区"><Stack gap="sm">
-      {(state.workspaces || []).length ? <Select label="目标工作区" value={read(workspace)} options={(state.workspaces || []).map((entry) => ({ label: `${entry.name}${entry.branch ? ` · ${entry.branch}` : ''}`, value: entry.id }))} disabled={read(busy)} onChange={(value) => { set(workspace, value || ''); set(formKind, null); set(launchOpen, false) }} /> : <Text>暂无工作区，请先在 Orca 打开项目。</Text>}
+      {(state.workspaces || []).length ? <Select label="目标工作区" value={read(workspace)} options={buildWorkspaceOptions(state.workspaces || [])} disabled={read(busy)} onChange={(value) => { set(workspace, value || ''); set(formKind, null); set(launchOpen, false) }} /> : <Text>暂无工作区，请先在 Orca 打开项目。</Text>}
       {selectedWs ? <Text size="xs" muted>{selectedWs.path}</Text> : null}
       <Text size="xs" muted>启动时冻结项目、路径与分支，不会跟随焦点切换；机器人必须先核对真实执行位置。</Text>
     </Stack></Card>

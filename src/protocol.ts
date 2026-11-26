@@ -1,7 +1,7 @@
 export type RoleKey = 'product' | 'architect' | 'developer' | 'tester'
 export type EntityKind = 'items' | 'sprints' | 'epics' | 'workflows'
 export interface FlowBot { id: string; name: string; agent: string; paused: boolean }
-export interface Workspace { id: string; name: string; path: string; branch?: string | null; projectId?: string | null; hostId?: string | null }
+export interface Workspace { id: string; name: string; path: string; branch?: string | null; projectId?: string | null; hostId?: string | null; projectName?: string | null }
 export interface FlowEntity {
   id: string
   title: string
