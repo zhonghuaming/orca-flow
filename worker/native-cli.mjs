@@ -32,7 +32,7 @@ export function createNativeCli({ executable = resolveCli(), exec = execute, cwd
     } catch (error) {
       let detail = error.message
       try { detail = JSON.parse(error.stdout).error?.message || detail } catch { /* Preserve original execution error. */ }
-      throw new Error(`Orca 原生命令失败：${detail}`, { cause: error })
+      throw new Error(`Orca 命令执行失败：${detail}`, { cause: error })
     }
     let envelope
     try { envelope = JSON.parse(stdout) } catch (error) { throw new Error('Orca 返回了无效 JSON。', { cause: error }) }
@@ -45,30 +45,25 @@ export function createNativeCli({ executable = resolveCli(), exec = execute, cwd
       if (!Array.isArray(result.bots)) throw new Error('Orca Bot 列表格式无效。')
       return result.bots.map((bot) => ({ id: id(bot.id), name: text(bot.name, 'Bot名称', 200), agent: typeof bot.agent === 'string' ? bot.agent : '', paused: bot.paused === true }))
     },
-    async send(botId, title, bodyFile) {
-      const result = await call(['orchestration', 'send', '--to', `bot:${id(botId)}`, '--chat', 'new', '--type', 'handoff', '--subject', text(title, '任务标题', 200), '--body-file', bodyFile])
-      if (typeof result.messageId !== 'string' || !result.messageId) throw new Error('Orca 未返回消息回执，投递结果未知。')
-      return { messageId: result.messageId }
-    },
     async listRuns() {
       const result = await call(['orchestration', 'run-list', '--environment', 'local', '--limit', '100'])
-      if (!Array.isArray(result.runs)) throw new Error('原生运行列表格式无效。')
+      if (!Array.isArray(result.runs)) throw new Error('Orca 执行记录列表格式无效。')
       return result.runs
     },
     getRun: (runId) => call(['orchestration', 'run-show', '--environment', 'local', '--id', id(runId)]),
     async listTasks(runId) {
       const result = await call(['orchestration', 'task-list', '--environment', 'local', '--run', id(runId), '--full'])
-      if (!Array.isArray(result.tasks)) throw new Error('原生任务列表格式无效。')
-      if (result.tasks.length > 100) throw new Error('原生任务超过本次核对容量（100 条），请缩小运行范围。')
+      if (!Array.isArray(result.tasks)) throw new Error('Orca 执行任务列表格式无效。')
+      if (result.tasks.length > 100) throw new Error('Orca 执行任务超过本次核对容量（100 条），请缩小运行范围。')
       return result.tasks.map((task) => {
         let deps = task.deps
         if (typeof deps === 'string') {
-          try { deps = JSON.parse(deps) } catch { throw new Error('原生任务依赖 JSON 无效。') }
+          try { deps = JSON.parse(deps) } catch { throw new Error('Orca 执行任务依赖 JSON 无效。') }
         }
-        if (deps !== undefined && (!Array.isArray(deps) || deps.some((dependency) => typeof dependency !== 'string'))) throw new Error('原生任务依赖格式无效。')
+        if (deps !== undefined && (!Array.isArray(deps) || deps.some((dependency) => typeof dependency !== 'string'))) throw new Error('Orca 执行任务依赖格式无效。')
         return {
-          id: id(task.id), title: text(task.task_title ?? task.title, '原生任务标题', 500),
-          status: text(task.status, '原生任务状态', 40), deps: deps ?? null,
+          id: id(task.id), title: text(task.task_title ?? task.title, 'Orca 执行任务标题', 500),
+          status: text(task.status, 'Orca 执行任务状态', 40), deps: deps ?? null,
           result: typeof task.result === 'string' ? truncateUtf8(task.result, 8000) : ''
         }
       })

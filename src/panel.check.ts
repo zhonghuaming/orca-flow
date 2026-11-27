@@ -1,13 +1,13 @@
 import { defineCheck } from 'orca/testing'
-const workspace = { id: 'check-workspace', name: '离线验收项目', path: 'E:/workspace/flow-demo', branch: 'main', projectId: 'check-project' }
+const workspace = { id: 'check-workspace', kind: 'worktree' as const, name: '离线验收项目', path: 'E:/workspace/flow-demo', branch: 'main', projectId: 'check-project', hostId: 'local' }
 const base = { roles: {}, bots: [], items: [], sprints: [], epics: [], workflows: [], runs: [] }
 export default defineCheck({
   empty: {
-    results: { 'workspace.list': { workspaces: [workspace] }, 'workspace.readContext': { workspaceId: workspace.id, branch: workspace.branch, displayName: workspace.name, terminals: [] } },
+    results: { 'workspace.list': { workspaces: [workspace], truncated: false }, 'workspace.readContext': { workspaceId: workspace.id, branch: workspace.branch, displayName: workspace.name, terminals: [] } },
     storage: { flow_native_v1: base }
   },
   populated: {
-    results: { 'workspace.list': { workspaces: [workspace] }, 'workspace.readContext': { workspaceId: workspace.id, branch: workspace.branch, displayName: workspace.name, terminals: [] } },
+    results: { 'workspace.list': { workspaces: [workspace], truncated: false }, 'workspace.readContext': { workspaceId: workspace.id, branch: workspace.branch, displayName: workspace.name, terminals: [] } },
     storage: { flow_native_v1: {
       ...base,
       items: [

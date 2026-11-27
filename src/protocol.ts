@@ -15,7 +15,18 @@ export interface FlowEntity {
   endDate?: string
   goal?: string
 }
-export interface NativeTask { id: string; title: string; status: string; deps: string[] | null; result?: string }
+export type RouteMode = 'normal' | 'quick' | 'light' | 'complex'
+export interface ExecutionPlan {
+  version: 1
+  mode: RouteMode
+  requiredStages: string[]
+  requiredRoles: RoleKey[]
+  roles: Partial<Record<RoleKey, string>>
+  validation: string
+  maxReworkRounds: number
+  requiresIndependentReview: boolean
+}
+export interface NativeTask { id: string; title: string; status: string; deps: string[] | null; result?: string; itemId?: string; workspaceId?: string }
 export interface FlowRun {
   id: string
   title: string
@@ -29,9 +40,25 @@ export interface FlowRun {
   error?: string
   message?: string
   tasks: NativeTask[]
+  executionPlan?: ExecutionPlan
   archived?: boolean
   archiveFile?: string
+  itemId?: string
+  itemSnapshot?: { title: string; sprintId?: string; epicId?: string }
+  acceptance?: string
+  scope?: string
+  delivery?: 'delivered' | 'not-delivered' | 'unknown'
+  checkedAt?: number
+  acceptedAt?: number
+  events?: { kind: string; at: number; detail: string; fingerprint: string }[]
 }
+export interface PreparedContract extends Pick<FlowRun, 'id' | 'title' | 'goal' | 'target' | 'roles' | 'createdAt' | 'executionPlan' | 'itemId' | 'itemSnapshot' | 'acceptance' | 'scope'> {
+  status: 'prepared'
+  productBot: { id: string; name: string }
+  contract: string
+  contractFile: string
+}
+export interface PrepareInput { id: string; title: string; goal: string; workspaceId: string; itemId?: string; acceptance?: string; scope?: string; mode?: RouteMode; requiresIndependentReview?: boolean }
 export interface FlowState {
   roles: Partial<Record<RoleKey, string>>
   bots: FlowBot[]
@@ -40,6 +67,7 @@ export interface FlowState {
   items: FlowEntity[]
   workflows: FlowEntity[]
   runs: FlowRun[]
+  prepared?: PreparedContract[]
   workspaces?: Workspace[]
 }
 declare module 'orca' {
@@ -50,7 +78,11 @@ declare module 'orca' {
     'flow.saveEntity': { input: { kind: EntityKind; entity: FlowEntity }; output: FlowState }
     'flow.deleteEntity': { input: { kind: EntityKind; id: string; workspaceId: string }; output: FlowState }
     'flow.openBoard': { input: { workspaceId: string }; output: { opened: boolean } }
-    'flow.launch': { input: { id: string; title: string; goal: string; workspaceId: string }; output: FlowState }
+    'flow.prepare': { input: PrepareInput; output: FlowState }
+    /** Always rejects: trusted-worker has no supported sender identity. */
+    'flow.launch': { input: PrepareInput; output: never }
+    'flow.linkRun': { input: { id: string; itemId: string; workspaceId: string; confirm: boolean }; output: FlowState }
+    'flow.acceptRun': { input: { id: string; workspaceId: string; confirm: boolean }; output: FlowState }
     'flow.archiveRun': { input: { id: string }; output: FlowState }
     'flow.refreshRun': { input: { id: string; nativeRunId?: string }; output: FlowState }
   }

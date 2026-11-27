@@ -36,7 +36,7 @@ test('原生只读JSON接口校验数组形状与参数，绝不查询模型', a
   await assert.rejects(bad.listBots(), /列表格式/)
   await assert.rejects(bad.listRuns(), /列表格式/)
   await assert.rejects(bad.listTasks('run-test'), /列表格式/)
-  await assert.rejects(bad.send('bot-a', 'test', 'x'), /回执/)
+  assert.equal(bad.send, undefined)
 })
 test('CLI超时错误保留原始平台描述且仅尝试一次', async () => {
   let calls = 0

@@ -29,7 +29,7 @@ test('拒绝本机Bot处理远端工作区，冻结宿主身份', async () => {
     const state = await f.call('flow.getState')
     assert.equal(state.workspaces[0].hostId, 'ssh:remote')
     await f.call('flow.saveRoles', { roles })
-    await assert.rejects(f.call('flow.launch', launch), /本机/)
+    await assert.rejects(f.call('flow.prepare', launch), /本机/)
     assert.equal(f.sent(), 0)
   } finally { await f.clean() }
 })
@@ -43,15 +43,16 @@ test('保留原生项目显示名，同时原样返回工作区ID与路径', asy
   } finally { await f.clean() }
 })
 
-test('正文写入前失败明确标记未投递failed，不永久占用工作区', async () => {
+test('正文写入失败不创建运行或准备记录，不占用工作区', async () => {
   const f = await harness(local, true)
   try {
     await f.call('flow.saveRoles', { roles })
-    await assert.rejects(f.call('flow.launch', launch))
+    await assert.rejects(f.call('flow.prepare', launch))
     const state = await f.call('flow.getState')
-    assert.equal(state.runs[0].status, 'failed')
+    assert.deepEqual(state.runs, [])
+    assert.deepEqual(state.prepared, [])
     assert.equal(f.sent(), 0)
-    await assert.rejects(f.call('flow.launch', { ...launch, id: 'flow-another' }), (error) => !error.message.includes('未核实'))
+    await assert.rejects(f.call('flow.prepare', { ...launch, id: 'flow-another' }), (error) => !error.message.includes('未核实'))
   } finally { await f.clean() }
 })
 test('拒绝不存在的迭代关联与超出IPC体积的状态', async () => {
