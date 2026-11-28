@@ -5,6 +5,17 @@ import { homedir } from 'node:os'
 import { id, text, truncateUtf8 } from './flow-domain.mjs'
 
 const execute = promisify(execFile)
+const CLI_TIMEOUT_MS = 20000
+const CLI_MAX_OUTPUT_BYTES = 1024 * 1024
+
+// Preserve only a complete read observation; process exit failure is still reported separately.
+function completedChatResponse(error, args) {
+  const chatList = args.length === 7 && args[0] === 'bot' && args[1] === 'chats' && args[2] === '--environment' && args[3] === 'local' && args[4] === '--bot' && args[6] === '--all'
+  if (!chatList || error.code !== null || error.signal !== 'SIGTERM' || error.killed !== true || error.stderr || typeof error.stdout !== 'string' || Buffer.byteLength(error.stdout) > CLI_MAX_OUTPUT_BYTES) return null
+  let envelope
+  try { envelope = JSON.parse(error.stdout) } catch { return null }
+  return envelope?.ok === true && envelope.result && typeof envelope.result === 'object' && !Array.isArray(envelope.result) ? envelope.result : null
+}
 const ENV_KEYS = new Set(['PATH', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP', 'USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA', 'HOMEDRIVE', 'HOMEPATH', 'LANG', 'LC_ALL'])
 export function localCliEnvironment(env = process.env, platform = process.platform) {
   const allowed = Object.fromEntries(Object.entries(env).filter(([key]) => ENV_KEYS.has(key.toUpperCase())))
@@ -21,15 +32,20 @@ export function resolveCli(env = process.env, platform = process.platform) {
   if (platform === 'win32') return join(env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Programs', 'orca', 'resources', 'bin', 'orca.exe')
   return '/usr/local/bin/orca'
 }
-export function createNativeCli({ executable = resolveCli(), exec = execute, cwd } = {}) {
+export function createNativeCli({ executable = resolveCli(), exec = execute, cwd, warn = (message) => console.warn(message) } = {}) {
   async function call(args) {
     let stdout
     try {
       const response = await exec(executable, [...args, '--json'], {
-        cwd, env: localCliEnvironment(), shell: false, windowsHide: true, timeout: 20000, maxBuffer: 1024 * 1024
+        cwd, env: localCliEnvironment(), shell: false, windowsHide: true, timeout: CLI_TIMEOUT_MS, maxBuffer: CLI_MAX_OUTPUT_BYTES
       })
       stdout = response.stdout
     } catch (error) {
+      const completed = completedChatResponse(error, args)
+      if (completed) {
+        warn('Orca 已返回完整只读应答，但客户端未按时结束；保留应答并继续校验聊天列表，未重试命令。')
+        return completed
+      }
       let detail = error.message
       try { detail = JSON.parse(error.stdout).error?.message || detail } catch { /* Preserve original execution error. */ }
       throw new Error(`Orca 命令执行失败：${detail}`, { cause: error })

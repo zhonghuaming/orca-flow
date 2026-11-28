@@ -46,6 +46,46 @@ test('CLI超时错误保留原始平台描述且仅尝试一次', async () => {
   const broken = createNativeCli({ exec: async () => { throw new Error('raw timeout') } })
   await assert.rejects(broken.listBots(), /raw timeout/)
 })
+test('只读CLI完整成功应答后的退出超时保留数据并明确告警，不重试', async () => {
+  const warnings = [], calls = []
+  const result = { bot: '架构', chats: [{ id: 'chat-a', title: '已有聊天', closed: false }] }
+  const cli = createNativeCli({ warn: (line) => warnings.push(line), exec: async (_exe, args) => {
+    calls.push(args)
+    throw Object.assign(new Error('process cleanup timeout'), { code: null, signal: 'SIGTERM', killed: true, stderr: '', stdout: JSON.stringify({ ok: true, result }) })
+  } })
+  assert.deepEqual(await cli.listBotChats('bot-a'), { botName: '架构', chats: result.chats })
+  assert.equal(calls.length, 1)
+  assert.equal(warnings.length, 1)
+  assert.match(warnings[0], /只读.*未.*结束/)
+})
+test('不完整应答、平台拒绝、stderr异常和非超时失败不能被当作成功', async () => {
+  const good = { code: null, signal: 'SIGTERM', killed: true, stderr: '', stdout: '{"ok":true,"result":{"bot":"架构","chats":[]}}' }
+  for (const change of [{ stdout: '{"ok":true' }, { stdout: '{"ok":false,"error":{"message":"native refusal"}}' }, { stderr: 'native failure' }, { killed: false }, { signal: 'SIGKILL' }, { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' }]) {
+    const warnings = []
+    const cli = createNativeCli({ warn: (line) => warnings.push(line), exec: async () => { throw Object.assign(new Error('expected native failure'), good, change) } })
+    await assert.rejects(cli.listBotChats('bot-a'))
+    assert.deepEqual(warnings, [])
+  }
+})
+
+test('完整成功信封也不能绕过聊天数据形状校验', async () => {
+  for (const result of [null, [], {}, { bot: '架构', chats: 'invalid' }, { bot: '架构', chats: [{ id: 'chat-a', title: 'chat', closed: 'false' }] }]) {
+    const cli = createNativeCli({ warn: () => {}, exec: async () => {
+      throw Object.assign(new Error('timeout'), { code: null, signal: 'SIGTERM', killed: true, stderr: '', stdout: JSON.stringify({ ok: true, result }) })
+    } })
+    await assert.rejects(cli.listBotChats('bot-a'))
+  }
+})
+
+test('聊天元数据的退出超时特例不能扩展到任务状态等其他命令', async () => {
+  const warnings = []
+  const cli = createNativeCli({ warn: (line) => warnings.push(line), exec: async () => {
+    throw Object.assign(new Error('timeout'), { code: null, signal: 'SIGTERM', killed: true, stderr: '', stdout: '{"ok":true,"result":{"tasks":[]}}' })
+  } })
+  await assert.rejects(cli.listTasks('run-test'))
+  assert.deepEqual(warnings, [])
+})
+
 test('领域校验拒绝未知实体/字段/非法点数与超长文本', () => {
   assert.equal(invalid('test').code, 'invalid_params')
   assert.throws(() => object([], []))
