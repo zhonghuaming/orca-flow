@@ -45,6 +45,15 @@ export function createNativeCli({ executable = resolveCli(), exec = execute, cwd
       if (!Array.isArray(result.bots)) throw new Error('Orca Bot 列表格式无效。')
       return result.bots.map((bot) => ({ id: id(bot.id), name: text(bot.name, 'Bot名称', 200), agent: typeof bot.agent === 'string' ? bot.agent : '', paused: bot.paused === true }))
     },
+    async listBotChats(botId) {
+      const result = await call(['bot', 'chats', '--environment', 'local', '--bot', id(botId), '--all'])
+      if (!Array.isArray(result.chats) || result.chats.length > 2000) throw new Error('Orca 聊天列表格式无效或超过查询容量（2000 条）。')
+      const chats = result.chats.map((chat) => {
+        if (!chat || typeof chat.title !== 'string' || chat.title.length > 4096 || chat.title.includes('\0') || typeof chat.closed !== 'boolean') throw new Error('Orca 聊天元数据格式无效。')
+        return { id: id(chat.id), title: chat.title, closed: chat.closed }
+      })
+      return { botName: text(result.bot, 'Bot名称', 200), chats }
+    },
     async listRuns() {
       const result = await call(['orchestration', 'run-list', '--environment', 'local', '--limit', '100'])
       if (!Array.isArray(result.runs)) throw new Error('Orca 执行记录列表格式无效。')

@@ -2,7 +2,7 @@ import {
   atom, Badge, Box, Button, Callout, Card, Checkbox, EmptyState, Heading, host, Input, on, plugin, read,
   Row, Select, set, Stack, Tab, Tabs, Text, Textarea, type PanelContext
 } from 'orca'
-import type { EntityKind, FlowEntity, FlowRun, FlowState, PreparedContract, RoleKey, RouteMode } from './protocol'
+import type { EntityKind, FlowEntity, FlowRun, FlowState, PreparedContract, RoleKey, RouteMode, StageChatLookup } from './protocol'
 import { ROLES, ROLE_LABELS, label, runContext, runGroup, runLabel, runNavigation, stages, stageSummary } from './runViews'
 import { buildWorkspaceOptions } from './workspaceLabels'
 import { mergeInitialSnapshot, resolveFocusedWorkspaceId, type WorkspaceFocus } from './workspaceFocus'
@@ -31,6 +31,8 @@ const goalTarget = atom('__none__')
 const deleting = atom('')
 const roleDraft = atom<Partial<Record<RoleKey, string>>>({})
 const nativeRunDraft = atom('')
+let stageChatGeneration = 0
+const stageChatLookup = atom<StageChatLookup | null>(null)
 const selectedRunId = atom('')
 const selectedItemId = atom('')
 const launchAcceptance = atom('')
@@ -45,6 +47,8 @@ const originalContract = atom('')
 const preparedContractId = atom('')
 const LANES = ['todo', 'in-progress', 'in-review', 'completed']
 function selectRun(run: FlowRun, destination = 'workflows') {
+  stageChatGeneration++
+  set(stageChatLookup, null)
   set(selectedRunId, run.id)
   set(selectedItemId, run.itemId || '')
   set(nativeRunDraft, '')
@@ -64,6 +68,8 @@ function currentRun(state: FlowState) {
 const newId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 function selectWorkspace(id: string) {
   if (id === read(workspace)) return
+  stageChatGeneration++
+  set(stageChatLookup, null)
   set(workspace, id)
   set(formKind, null)
   set(launchOpen, false)
@@ -92,13 +98,25 @@ function update(next: FlowState) {
   set(data, { ...next, workspaces: next.workspaces ?? previous.workspaces })
   applyWorkspaceFocus()
 }
-async function action(fn: () => Promise<void>) {
+async function action(fn: () => Promise<void>, isCurrent = () => true) {
   if (read(busy)) return
   set(busy, true)
   set(notice, null)
   try { await fn() } catch (error) {
-    set(notice, { tone: 'danger', message: `操作未完成：${error instanceof Error ? error.message : String(error)}` })
+    // A finished lookup from a previous view must not overwrite the current notice.
+    if (isCurrent()) set(notice, { tone: 'danger', message: `操作未完成：${error instanceof Error ? error.message : String(error)}` })
   } finally { set(busy, false) }
+}
+function stageCards(state: FlowState, run: FlowRun) {
+  return stages(state, run, { busy: read(busy), lookup: read(stageChatLookup), find: (role) => {
+    const generation = ++stageChatGeneration
+    const isCurrent = () => generation === stageChatGeneration && read(workspace) === run.target.id && currentRun(read(data))?.id === run.id
+    return action(async () => {
+      set(stageChatLookup, null)
+      const result = await plugin.request('flow.findStageChats', { id: run.id, workspaceId: run.target.id, role })
+      if (isCurrent()) set(stageChatLookup, { runId: run.id, role, result })
+    }, isCurrent)
+  } })
 }
 function openForm(kind: EntityKind) {
   set(formKind, kind)
@@ -162,7 +180,7 @@ export function setup(ctx: PanelContext) {
   let revision = 0
   let businessRevision = 0
   let disposed = false
-  ctx.subscriptions.push({ dispose: () => { disposed = true; revision++ } })
+  ctx.subscriptions.push({ dispose: () => { disposed = true; revision++; stageChatGeneration++ } })
   ctx.subscriptions.push(plugin.on('flow.changed', (next) => { businessRevision++; update(next) }))
   ctx.subscriptions.push(on('workspace.changed', ({ context }) => {
     const previous = read(focusedWorkspace)
@@ -340,7 +358,7 @@ export default function Panel() {
           {workspaceRuns.length > 1 ? <Select label="当前执行记录" value={selectedRun.id} options={workspaceRuns.map((run) => ({ label: `${run.title}（${run.id}）`, value: run.id }))} onChange={(value) => { const run = workspaceRuns.find((entry) => entry.id === value); if (run) selectRun(run) }} /> : null}
           {runContext(state, selectedRun, read(originalContract) === selectedRun.id, () => set(originalContract, read(originalContract) === selectedRun.id ? '' : selectedRun.id))}
           {runNavigation(selectedRun, (destination) => selectRun(selectedRun, destination), 'workflows')}
-          {stages(state, selectedRun)}
+          {stageCards(state, selectedRun)}
           {runControls(state, selectedRun)}
         </> : <>
           <Text size="xs">从看板选择具体任务，确认范围后准备任务说明；尚无执行记录时，可查看角色与模板。</Text>
@@ -396,7 +414,7 @@ export default function Panel() {
             {runContext(state, selectedRun, read(originalContract) === selectedRun.id, () => set(originalContract, read(originalContract) === selectedRun.id ? '' : selectedRun.id))}
             {runNavigation(selectedRun, (destination) => selectRun(selectedRun, destination), 'runs')}
             {runControls(state, selectedRun)}
-            {stages(state, selectedRun)}
+            {stageCards(state, selectedRun)}
             <Heading level={3}>近期关键历史</Heading>
             {!selectedRun.events?.length ? <Text size="xs">旧记录未保存事件历史；刷新仅核对当前结果，不会补充过去的事件。</Text> : selectedRun.events.map((entry, index) => <Text key={`${entry.at}-${index}`} size="xs">{new Date(entry.at).toLocaleString()} · {label(entry.kind)}：{entry.detail}</Text>)}
           </Stack></Card> : <Text size="xs">选择执行记录，查看结果证据与历史。</Text>}

@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { createNativeCli } from './native-cli.mjs'
-import { buildKickoff, emptyState, id, invalid, object, resolveExecutionPlan, STAGES, summarizeTasks, text, truncateUtf8, validateEntity, validateRoles } from './flow-domain.mjs'
+import { buildKickoff, emptyState, id, invalid, object, resolveExecutionPlan, ROLE_KEYS, STAGES, summarizeTasks, text, truncateUtf8, validateEntity, validateRoles } from './flow-domain.mjs'
 
 import { event, observed } from './run-history.mjs'
 import { DEFAULT_SCOPE } from './execution-plan.mjs'
@@ -94,6 +94,18 @@ export async function createFlowWorker(orca, { cli = createNativeCli(), dataDir 
     const result = await orca.host.call('commands.run', { action: 'workspace.openBoard' })
     if (result?.ran !== true) throw new Error('Orca 未确认打开看板。')
     return { opened: true }
+  })
+  orca.panels.handle('flow.findStageChats', async (params) => {
+    object(params, ['id', 'workspaceId', 'role'])
+    const run = state.runs.find((entry) => entry.id === id(params.id) && entry.target.id === params.workspaceId)
+    if (!run || !ROLE_KEYS.includes(params.role)) throw invalid('执行记录、工作区或角色无效。')
+    const botId = id(run.roles[params.role])
+    const result = await cli.listBotChats(botId)
+    // Titles are a search aid, never authoritative task/session bindings.
+    const marker = new RegExp(`(?:^|[^a-zA-Z0-9_-])Flow ${run.id}(?=$|[\\s:：])`)
+    const matches = result.chats.filter((chat) => marker.test(chat.title) && (params.role === 'product' || chat.title.includes(`[Flow ${params.role}]`)))
+    return { botId, botName: result.botName, match: 'title-candidates', truncated: matches.length > 20,
+      chats: matches.slice(0, 20).map((chat) => ({ ...chat, title: truncateUtf8(chat.title, 1000) })) }
   })
   // No trusted-worker sender/delegation API exists in the supported Orca build.
   // Reject even legacy IDs and injected mock senders: there is no delivery escape hatch.

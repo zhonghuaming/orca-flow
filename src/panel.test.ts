@@ -2,6 +2,59 @@ import { assert, mockHost, mount, test } from 'orca/testing'
 import * as panel from './panel'
 
 const state = { roles: {}, bots: [], sprints: [], epics: [], items: [], workflows: [], runs: [], workspaces: [{ id: 'ws-test', name: '离线测试工作区', path: 'E:/workspace/fixture', branch: 'main' }] }
+test('阶段卡可查找已有聊天，清楚说明不能直达；跨工作区清理结果，不发送或重跑', async () => {
+  const roles = { product: 'p', architect: 'a', developer: 'd', tester: 't' }
+  const run = { id: 'chat-run', title: '盘点', goal: '', target: state.workspaces[0]!, roles, status: 'failed', tasks: [], createdAt: 1 }
+  const other = { ...state.workspaces[0]!, id: 'other', path: 'D:/other' }
+  let input: unknown
+  const h = mockHost({ results: { 'workspace.readContext': { workspaceId: 'ws-test', branch: 'main', displayName: '测试', terminals: [] } }, requests: {
+    'flow.getState': { ...state, runs: [run], workspaces: [...state.workspaces, other] },
+    'flow.findStageChats': (params) => { input = params; return { botId: 'a', botName: '架构 Bot', match: 'title-candidates' as const, truncated: false, chats: [{ id: 'chat-a', title: 'Flow chat-run [Flow architect] 方案', closed: false }] } }
+  } })
+  const view = await mount(panel, { host: h })
+  try {
+    await view.settled()
+    await view.select({ type: 'Tabs' }, 'runs')
+    await view.press({ type: 'Button', text: '查找架构会话' })
+    assert.deepEqual(input, { id: 'chat-run', workspaceId: 'ws-test', role: 'architect' })
+    assert.ok(view.find({ type: 'Callout', text: /不支持直达 Bot 聊天.*仅按标题查找/ }))
+    assert.ok(view.find({ type: 'Text', text: /查找路径：.*架构 Bot/ }))
+    assert.ok(view.find({ type: 'Text', text: /会话 ID：.*chat-a/ }))
+    assert.equal(view.find({ type: 'Button', text: '打开对应会话' }), null)
+    await view.select({ type: 'Select', label: '目标工作区' }, 'other')
+    assert.equal(view.find({ type: 'Text', text: /会话 ID：.*chat-a/ }), null)
+    assert.equal(h.calls.some((call) => /flow.launch|agent.resume|agent.launch|terminal.send/.test(JSON.stringify(call.params ?? null))), false)
+    assert.deepEqual(view.errors, [])
+    assert.deepEqual(view.refusals, [])
+  } finally { await view.unmount() }
+})
+
+test('会话查询晚失败不能污染已切换的工作区', async () => {
+  const roles = { product: 'p', architect: 'a', developer: 'd', tester: 't' }
+  const run = { id: 'late-run', title: '盘点', goal: '', target: state.workspaces[0]!, roles, status: 'failed', tasks: [], createdAt: 1 }
+  const other = { ...state.workspaces[0]!, id: 'other', path: 'D:/other' }
+  let rejectRead!: (error: Error) => void
+  let markStarted!: () => void
+  const started = new Promise<void>((resolve) => { markStarted = resolve })
+  const pendingRead = new Promise<never>((_resolve, reject) => { rejectRead = reject })
+  const h = mockHost({ results: { 'workspace.readContext': { workspaceId: 'ws-test', branch: 'main', displayName: '测试', terminals: [] } }, requests: {
+    'flow.getState': { ...state, runs: [run], workspaces: [...state.workspaces, other] },
+    'flow.findStageChats': () => { markStarted(); return pendingRead }
+  } })
+  const view = await mount(panel, { host: h })
+  try {
+    await view.select({ type: 'Tabs' }, 'runs')
+    const query = view.press({ type: 'Button', text: '查找架构会话' })
+    await started
+    const switching = view.select({ type: 'Select', label: '目标工作区' }, 'other')
+    rejectRead(new Error('OLD_CONTEXT_READ_ERROR'))
+    await Promise.all([query, switching])
+    await view.settled()
+    assert.equal(view.valueOf({ type: 'Select', label: '目标工作区' }), 'other')
+    assert.equal(view.find({ type: 'Callout', text: /OLD_CONTEXT_READ_ERROR/ }), null)
+  } finally { await view.unmount() }
+})
+
 test('同一任务跨看板工作流记录往返保持精确Run；切工作区不泄漏旧选择', async () => {
   const item = { id: 'item-one', title: '当前任务', description: '验收原文', workspaceId: 'ws-test', status: 'in-progress' }
   const run = { id: 'flow-one', itemId: item.id, title: item.title, goal: '目标', target: state.workspaces[0], roles: { product: 'p', architect: 'a', developer: 'd', tester: 't' }, status: 'blocked', tasks: [{ id: 'task-p', title: '[Flow product]', status: 'blocked', deps: [], result: '离线原始阻塞' }], createdAt: 1, error: 'raw offline error', messageId: 'receipt-one', nativeRunId: 'native-one' }

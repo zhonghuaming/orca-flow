@@ -1,5 +1,5 @@
 import { Badge, Button, Callout, Card, Heading, Row, Stack, Text } from 'orca'
-import type { FlowRun, FlowState, NativeTask, RoleKey } from './protocol'
+import type { FlowRun, FlowState, NativeTask, RoleKey, StageChatLookup, StageChats } from './protocol'
 
 export const ROLES: RoleKey[] = ['product', 'architect', 'developer', 'tester']
 const ROUTE_LABELS: Record<string, string> = { normal: '标准', quick: '快速交付', light: '轻量修改', complex: '复杂变更' }
@@ -68,7 +68,20 @@ export function runContext(state: FlowState, run: FlowRun, contractOpen: boolean
   </Stack>
 }
 
-export function stages(state: FlowState, run: FlowRun) {
+function chatLocations(result: StageChats) {
+  return <Stack gap="xs">
+    <Callout tone="accent" title="聊天查找结果，不是已确认的阶段关联">当前 Orca 插件接口不支持直达 Bot 聊天；以下仅按标题查找，不会发送消息、启动 Agent 或重跑任务。</Callout>
+    <Text size="xs">查找路径：Orca 侧栏 → 机器人 → {result.botName} → 聊天列表。请核对 Bot ID：{result.botId}</Text>
+    {!result.chats.length ? <Text size="xs">没有找到包含本次执行标记的阶段聊天。可能标题已变更或聊天未创建；这不代表任务未执行，请人工核对，不要重发。</Text> : result.chats.map((chat) => <Card key={chat.id} title={chat.title || '未命名聊天'}>
+      <Stack gap="xs"><Badge>{chat.closed ? '已关闭，仅供查找；不要启动替代会话' : '已有聊天，请在聊天列表中按标题打开'}</Badge>
+        <Text size="xs">会话 ID：{chat.id}</Text>
+      </Stack>
+    </Card>)}
+    {result.truncated ? <Text size="xs">匹配超过 20 条，仅显示前 20 条；无法确定唯一会话，请在原生聊天列表中继续核对。</Text> : null}
+  </Stack>
+}
+
+export function stages(state: FlowState, run: FlowRun, navigation?: { find: (role: RoleKey) => void; busy: boolean; lookup: StageChatLookup | null }) {
   const requiredRoles = run.executionPlan ? ROLES.filter((role) => run.executionPlan!.requiredStages.includes(`[Flow ${role}]`)) : ROLES
   return <Stack gap="sm">{ROLES.map((role) => {
     const tasks = run.tasks.filter((task) => task.title === `[Flow ${role}]`)
@@ -77,6 +90,8 @@ export function stages(state: FlowState, run: FlowRun) {
     return <Card key={role} title={ROLE_LABELS[role]}><Stack gap="xs">
       {!included ? <Badge>{role === 'product' ? '轻量协调（非阶段）' : '未纳入本路线（按需）'}</Badge> : null}
       <Text size="xs">本次执行角色：{state.bots.find((bot) => bot.id === botId)?.name || botId}（{botId}）</Text>
+      {navigation && (included || role === 'product') ? <Button size="sm" variant="outline" disabled={navigation.busy} onPress={() => navigation.find(role)}>{`查找${ROLE_LABELS[role]}会话`}</Button> : null}
+      {navigation?.lookup?.runId === run.id && navigation.lookup.role === role ? chatLocations(navigation.lookup.result) : null}
       {!included ? <Text size="xs">不计入阶段完成数，也不启动此角色任务。</Text> : !tasks.length ? <Text size="xs">尚无可核实阶段任务</Text> : tasks.map((task) => <Stack key={task.id} gap="xs">
         <Badge>{label(task.status)}</Badge><Text size="xs">Orca 任务 ID：{task.id}</Text>
         <Text size="xs">前置任务：{task.deps?.join('、') || '无/未保存'}</Text>

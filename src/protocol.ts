@@ -26,6 +26,14 @@ export interface ExecutionPlan {
   maxReworkRounds: number
   requiresIndependentReview: boolean
 }
+export interface StageChats {
+  botId: string
+  botName: string
+  match: 'title-candidates'
+  truncated: boolean
+  chats: { id: string; title: string; closed: boolean }[]
+}
+export interface StageChatLookup { runId: string; role: RoleKey; result: StageChats }
 export interface NativeTask { id: string; title: string; status: string; deps: string[] | null; result?: string; itemId?: string; workspaceId?: string }
 export interface FlowRun {
   id: string
@@ -78,6 +86,7 @@ declare module 'orca' {
     'flow.saveEntity': { input: { kind: EntityKind; entity: FlowEntity }; output: FlowState }
     'flow.deleteEntity': { input: { kind: EntityKind; id: string; workspaceId: string }; output: FlowState }
     'flow.openBoard': { input: { workspaceId: string }; output: { opened: boolean } }
+    'flow.findStageChats': { input: { id: string; workspaceId: string; role: RoleKey }; output: StageChats }
     'flow.prepare': { input: PrepareInput; output: FlowState }
     /** Always rejects: trusted-worker has no supported sender identity. */
     'flow.launch': { input: PrepareInput; output: never }
