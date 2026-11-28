@@ -116,6 +116,13 @@ function stageCards(state: FlowState, run: FlowRun) {
       const result = await plugin.request('flow.findStageChats', { id: run.id, workspaceId: run.target.id, role })
       if (isCurrent()) set(stageChatLookup, { runId: run.id, role, result })
     }, isCurrent)
+  }, open: (role, sessionId) => {
+    const generation = stageChatGeneration
+    const isCurrent = () => generation === stageChatGeneration && read(workspace) === run.target.id && currentRun(read(data))?.id === run.id
+    return action(async () => {
+      await plugin.request('flow.focusStageChat', { id: run.id, workspaceId: run.target.id, role, sessionId })
+      if (isCurrent()) set(notice, { tone: 'success', message: '已定位到已有聊天；未发送消息、恢复 Agent 或重跑任务。' })
+    }, isCurrent)
   } })
 }
 function openForm(kind: EntityKind) {

@@ -29,6 +29,27 @@ test('阶段卡可查找已有聊天，清楚说明不能直达；跨工作区�
   } finally { await view.unmount() }
 })
 
+test('增强宿主给候选提供打开此聊天入口，只提交所选会话ID且不重跑', async () => {
+  const run = { id: 'focus-run', title: '盘点', goal: '', target: state.workspaces[0]!, roles: { product: 'p', architect: 'a', developer: 'd', tester: 't' }, status: 'failed', tasks: [], createdAt: 1 }
+  let focused: unknown
+  const h = mockHost({ results: { 'workspace.readContext': { workspaceId: 'ws-test', branch: 'main', displayName: '测试', terminals: [] } }, requests: {
+    'flow.getState': { ...state, runs: [run] },
+    'flow.findStageChats': { botId: 'a', botName: '架构 Bot', match: 'title-candidates' as const, canFocus: true, truncated: false, chats: [{ id: 'chat-a', title: 'Flow focus-run [Flow architect] 方案', closed: false }] },
+    'flow.focusStageChat': (params) => { focused = params; return { focused: true as const } }
+  } })
+  const view = await mount(panel, { host: h })
+  try {
+    await view.select({ type: 'Tabs' }, 'runs')
+    await view.press({ type: 'Button', text: '查找架构会话' })
+    assert.ok(view.find({ type: 'Callout', text: /可打开下列已有聊天.*仅按标题查找/ }))
+    await view.press({ type: 'Button', text: '打开此聊天' })
+    assert.deepEqual(focused, { id: run.id, workspaceId: 'ws-test', role: 'architect', sessionId: 'chat-a' })
+    assert.ok(view.find({ type: 'Callout', text: /已定位到已有聊天/ }))
+    assert.equal(h.calls.some((call) => /flow.launch|agent.resume|agent.launch|terminal.send/.test(JSON.stringify(call.params ?? null))), false)
+    assert.deepEqual(view.errors, [])
+  } finally { await view.unmount() }
+})
+
 test('会话查询晚失败不能污染已切换的工作区', async () => {
   const roles = { product: 'p', architect: 'a', developer: 'd', tester: 't' }
   const run = { id: 'late-run', title: '盘点', goal: '', target: state.workspaces[0]!, roles, status: 'failed', tasks: [], createdAt: 1 }

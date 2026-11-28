@@ -30,6 +30,7 @@ export interface StageChats {
   botId: string
   botName: string
   match: 'title-candidates'
+  canFocus?: boolean
   truncated: boolean
   chats: { id: string; title: string; closed: boolean }[]
 }
@@ -87,6 +88,7 @@ declare module 'orca' {
     'flow.deleteEntity': { input: { kind: EntityKind; id: string; workspaceId: string }; output: FlowState }
     'flow.openBoard': { input: { workspaceId: string }; output: { opened: boolean } }
     'flow.findStageChats': { input: { id: string; workspaceId: string; role: RoleKey }; output: StageChats }
+    'flow.focusStageChat': { input: { id: string; workspaceId: string; role: RoleKey; sessionId: string }; output: { focused: true } }
     'flow.prepare': { input: PrepareInput; output: FlowState }
     /** Always rejects: trusted-worker has no supported sender identity. */
     'flow.launch': { input: PrepareInput; output: never }

@@ -5,16 +5,16 @@ import { createFlowWorker } from '../worker/main.mjs'
 import { emptyState } from '../worker/flow-domain.mjs'
 
 const run = { id: 'flow-one', title: '任务', target: { id: 'ws-one' }, roles: { architect: 'bot-a', product: 'bot-p' }, tasks: [], status: 'failed' }
-async function harness(chats = [], lookupError) {
-  const calls = [], handlers = new Map()
+async function harness(chats = [], lookupError, { canFocus = false, focusResult = { focused: true } } = {}) {
+  const calls = [], hostCalls = [], handlers = new Map()
   let stored = { ...emptyState(), runs: [run] }
   await createFlowWorker({
     storage: { get: async () => stored, set: async (_key, value) => { stored = structuredClone(value) } },
     panels: { handle: (key, fn) => handlers.set(key, fn), post: () => {} },
-    host: { call: async () => { throw new Error('不得导航或调用其他 Host API') } }
+    host: { has: (method) => method === 'agent.focus' && canFocus, call: async (method, params) => { hostCalls.push({ method, params }); if (method === 'agent.focus' && canFocus) return focusResult; throw new Error('不得调用其他 Host API') } }
   }, { cli: { listBotChats: async (botId) => { calls.push(botId); if (lookupError) throw lookupError; return { botName: '架构机器人', chats } } } })
   const before = structuredClone(stored)
-  return { call: (params) => handlers.get('flow.findStageChats')(params), calls, unchanged: () => assert.deepEqual(stored, before) }
+  return { call: (params) => handlers.get('flow.findStageChats')(params), focus: (params) => handlers.get('flow.focusStageChat')(params), calls, hostCalls, unchanged: () => assert.deepEqual(stored, before) }
 }
 const request = { id: run.id, workspaceId: run.target.id, role: 'architect' }
 
@@ -51,6 +51,33 @@ test('零匹配、多匹配、关闭聊天和读取失败不冒认会话，不�
   await assert.rejects(broken.call(request), /native read failed/)
   empty.unchanged(); many.unchanged(); broken.unchanged()
 })
+test('点击候选先重查冻结Bot归属，只聚焦指定既有聊天且不推进任务', async () => {
+  const f = await harness([{ id: 'chat-good', title: 'Flow flow-one [Flow architect] 方案', closed: false }], undefined, { canFocus: true })
+  assert.equal((await f.call(request)).canFocus, true)
+  assert.deepEqual(await f.focus({ ...request, sessionId: 'chat-good' }), { focused: true })
+  assert.deepEqual(f.hostCalls, [{ method: 'agent.focus', params: { sessionId: 'chat-good', hostId: 'local' } }])
+  assert.deepEqual(f.calls, ['bot-a', 'bot-a'])
+  f.unchanged()
+})
+test('旧宿主、关闭/不存在/错阶段聊天及跨工作区请求不能聚焦，不自动重试', async () => {
+  const good = { id: 'chat-good', title: 'Flow flow-one [Flow architect] 方案', closed: false }
+  const old = await harness([good])
+  assert.equal((await old.call(request)).canFocus, false)
+  await assert.rejects(old.focus({ ...request, sessionId: good.id }), /不支持/)
+  assert.deepEqual(old.hostCalls, [])
+  for (const chats of [[], [{ ...good, closed: true }], [{ ...good, title: 'Flow other [Flow architect] 方案' }], [good, good]]) {
+    const f = await harness(chats, undefined, { canFocus: true })
+    await assert.rejects(f.focus({ ...request, sessionId: good.id }))
+    assert.deepEqual(f.hostCalls, [])
+    f.unchanged()
+  }
+  const f = await harness([good], undefined, { canFocus: true, focusResult: { focused: false } })
+  await assert.rejects(f.focus({ ...request, workspaceId: 'foreign', sessionId: good.id }))
+  await assert.rejects(f.focus({ ...request, sessionId: good.id }), /未确认/)
+  assert.equal(f.hostCalls.length, 1)
+  f.unchanged(); old.unchanged()
+})
+
 test('原生聊天适配器只运行bot chats，校验形状，不读取消息或执行模型', async () => {
   const calls = []
   const cli = createNativeCli({ exec: async (_exe, args, options) => {
